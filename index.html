@@ -60,7 +60,8 @@ h2{font-size:12px;color:var(--cyan);margin:0 0 14px;text-shadow:0 0 8px rgba(79,
   flex:1; min-width:0; display:flex; align-items:center; gap:10px; cursor:pointer;
   border:2px dashed var(--cyan); border-radius:10px; padding:12px; color:var(--muted);
 }
-.file input{display:none}
+.file{position:relative}
+.file input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
 .file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #msg{min-height:20px;color:var(--lime);margin:10px 0 0}
 .games{display:grid;gap:12px}
@@ -110,7 +111,7 @@ async function render() {
   }
   const uid = session.user.id;
   const name = session.user.user_metadata.full_name || session.user.user_metadata.name || 'joueur';
-  const { data: files } = await sb.storage.from(BUCKET).list(uid + '/roms', { limit: 200 });
+  const { data: files, error: listError } = await sb.storage.from(BUCKET).list(uid + '/roms', { limit: 200 });
   const games = (files || []).filter(f => f.id);
 
   app.innerHTML = `
@@ -136,7 +137,8 @@ async function render() {
   input.onchange = () => { document.getElementById('fname').textContent = input.files[0]?.name || 'Choisir ma ROM…'; };
 
   const list = document.getElementById('list');
-  if (!games.length) list.innerHTML = '<p class="empty">Aucun jeu pour l\'instant. Ajoute ta première ROM !</p>';
+  if (listError) list.innerHTML = '<p class="empty" style="color:#ff4d6d">Erreur de lecture : ' + listError.message + '</p>';
+  else if (!games.length) list.innerHTML = '<p class="empty">Aucun jeu pour l\'instant. Ajoute ta première ROM !</p>';
   for (const f of games) {
     const core = CORES[f.name.split('.').pop().toLowerCase()];
     const row = document.createElement('div');
@@ -168,14 +170,20 @@ async function render() {
   }
 
   document.getElementById('send').onclick = async () => {
-    const f = input.files[0];
-    if (!f) return;
     const msg = document.getElementById('msg');
+    const f = input.files[0];
+    if (!f) { msg.textContent = 'Aucun fichier choisi : touche le cadre en pointillés pour choisir ta ROM.'; return; }
     if (f.size > 50 * 1024 * 1024) { msg.textContent = 'Fichier trop gros (50 Mo maximum).'; return; }
     msg.innerHTML = 'Envoi en cours<span class="blink">_</span>';
-    const { error } = await sb.storage.from(BUCKET).upload(`${uid}/roms/${safe(f.name)}`, f, { upsert: true });
-    if (error) { msg.textContent = 'Erreur : ' + error.message; return; }
-    render();
+    try {
+      const { error } = await sb.storage.from(BUCKET).upload(`${uid}/roms/${safe(f.name)}`, f,
+        { upsert: true, contentType: 'application/octet-stream' });
+      if (error) { msg.textContent = 'Erreur : ' + error.message; return; }
+      await render();
+      document.getElementById('msg').textContent = 'Jeu ajouté ✓';
+    } catch (e) {
+      msg.textContent = 'Erreur réseau : ' + e.message;
+    }
   };
 }
 sb.auth.onAuthStateChange(() => render());
