@@ -75,7 +75,7 @@ h2{font-size:12px;color:var(--cyan);margin:0 0 14px;text-shadow:0 0 8px rgba(79,
   min-width:44px; text-align:center; color:#06102a; background:var(--cyan); flex-shrink:0;
 }
 .badge.n64{background:var(--green)} .badge.gba{background:#b48cff} .badge.snes{background:#ffd34d}
-.badge.nds{background:#ff8fb1} .badge.nes{background:#ff6b6b} .badge.gb{background:#a3e07a} .badge.segaMD{background:#6ea8ff}
+.badge.nds{background:#ff8fb1} .badge.nes{background:#ff6b6b} .badge.gb{background:#a3e07a} .badge.segaMD{background:#6ea8ff} .badge.psx{background:#c9d2e8}
 .name{flex:1;min-width:0;font-weight:700;word-break:break-word}
 .actions{display:flex;gap:8px;flex-shrink:0}
 .empty{color:var(--muted);text-align:center;padding:14px 0}
@@ -93,18 +93,19 @@ footer{text-align:center;color:var(--muted);font-size:14px;margin-top:26px}
   <footer>Chaque joueur utilise ses propres ROMs, issues de ses propres jeux.</footer>
 </div>
 <script type="module">
-import { sb, BUCKET, CORES, safe } from './config.js';
+import { sb, BUCKET, CORES, safe, CLOUD_MAX } from './config.js';
+import { saveRom, deleteRom, listRoms, askPersist } from './rom-store.js';
 const app = document.getElementById('app');
-const LABEL = { gba:'GBA', gb:'GB', nes:'NES', snes:'SNES', n64:'N64', nds:'DS', segaMD:'MD' };
+const LABEL = { gba:'GBA', gb:'GB', nes:'NES', snes:'SNES', n64:'N64', nds:'DS', segaMD:'MD', psx:'PS1' };
 let selectedFile = null;   // fichier choisi, gardé même si la page se redessine
 let currentUid = undefined;
 
-async function render() {
+async function render(note) {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
     app.innerHTML = `<div class="panel" style="text-align:center">
       <h1>PRESS START</h1>
-      <p class="sub">Connecte-toi pour retrouver tes jeux et tes sauvegardes sur tous tes appareils.</p>
+      <p class="sub">Connecte-toi pour retrouver tes sauvegardes sur tous tes appareils.</p>
       <p style="margin-top:20px"><button class="btn discord" id="login">Connexion Discord</button></p>
     </div>`;
     document.getElementById('login').onclick = () =>
@@ -113,8 +114,16 @@ async function render() {
   }
   const uid = session.user.id;
   const name = session.user.user_metadata.full_name || session.user.user_metadata.name || 'joueur';
-  const { data: files, error: listError } = await sb.storage.from(BUCKET).list(uid + '/roms', { limit: 200 });
-  const games = (files || []).filter(f => f.id);
+
+  // ROMs sur cet appareil + anciennes ROMs en ligne + sauvegardes en ligne
+  const local = await listRoms(uid).catch(() => []);
+  const [{ data: cloudRoms }, { data: saves }] = await Promise.all([
+    sb.storage.from(BUCKET).list(uid + '/roms', { limit: 500 }),
+    sb.storage.from(BUCKET).list(uid + '/saves', { limit: 500 })
+  ]);
+  const cloud = (cloudRoms || []).filter(f => f.id).map(f => f.name);
+  const saved = new Set((saves || []).filter(f => f.id).map(f => f.name.replace(/\.sav$/, '')));
+  const all = [...new Set([...local, ...cloud, ...saved])].sort((a, b) => a.localeCompare(b));
 
   app.innerHTML = `
     <div class="panel user">
@@ -123,18 +132,20 @@ async function render() {
     </div>
     <div class="panel">
       <h2>&gt; AJOUTER UN JEU</h2>
+      <p class="sub" style="margin:0 0 12px">Moins de 50 Mo : la ROM part en ligne et te suit partout. Au-delà (DS, PlayStation) : elle reste sur cet appareil. Ta sauvegarde, elle, est toujours en ligne.<br>PlayStation : utilise un fichier .chd ou .pbp (un seul fichier par jeu).</p>
       <div class="upload">
         <label class="file"><input type="file" id="rom"><span id="fname">Choisir ma ROM…</span></label>
-        <button class="btn" id="send">Envoyer</button>
+        <button class="btn" id="send">Ajouter</button>
       </div>
       <p id="msg"></p>
     </div>
     <div class="panel">
-      <h2>&gt; MES JEUX (${games.length})</h2>
+      <h2>&gt; MES JEUX (${all.length})</h2>
       <div class="games" id="list"></div>
     </div>`;
   app.querySelector('.hello b').textContent = name;
-  document.getElementById('logout').onclick = async () => { await sb.auth.signOut(); render(); };
+  if (note) document.getElementById('msg').textContent = note;
+  document.getElementById('logout').onclick = async () => { await sb.auth.signOut(); };
   const input = document.getElementById('rom');
   if (selectedFile) document.getElementById('fname').textContent = selectedFile.name;
   input.onchange = () => {
@@ -144,10 +155,10 @@ async function render() {
   };
 
   const list = document.getElementById('list');
-  if (listError) list.innerHTML = '<p class="empty" style="color:#ff4d6d">Erreur de lecture : ' + listError.message + '</p>';
-  else if (!games.length) list.innerHTML = '<p class="empty">Aucun jeu pour l\'instant. Ajoute ta première ROM !</p>';
-  for (const f of games) {
-    const core = CORES[f.name.split('.').pop().toLowerCase()];
+  if (!all.length) list.innerHTML = '<p class="empty">Aucun jeu pour l\'instant. Ajoute ta première ROM !</p>';
+  for (const file of all) {
+    const core = CORES[file.split('.').pop().toLowerCase()];
+    const here = local.includes(file) || cloud.includes(file);
     const row = document.createElement('div');
     row.className = 'game';
     const badge = document.createElement('span');
@@ -155,20 +166,31 @@ async function render() {
     badge.textContent = LABEL[core] || '???';
     const label = document.createElement('span');
     label.className = 'name';
-    label.textContent = f.name.replace(/\.[^.]+$/, '');
+    label.textContent = file.replace(/\.[^.]+$/, '');
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size:13px;color:var(--muted);font-weight:500';
+    info.textContent = (saved.has(file) ? '☁ Sauvegarde en ligne' : 'Pas encore de sauvegarde')
+      + (cloud.includes(file) ? ' · ROM en ligne' : local.includes(file) ? ' · ROM sur cet appareil' : ' · Ajoute la ROM sur cet appareil pour jouer');
+    label.appendChild(info);
     const btns = document.createElement('span');
     btns.className = 'actions';
-    if (core) {
+    if (core && here) {
       const a = document.createElement('a');
       a.className = 'btn'; a.textContent = '▶ JOUER';
-      a.href = 'play.html?file=' + encodeURIComponent(f.name) + '&core=' + core;
+      a.href = 'play.html?file=' + encodeURIComponent(file) + '&core=' + core;
       btns.appendChild(a);
     }
     const del = document.createElement('button');
     del.className = 'btn del'; del.textContent = '✕'; del.title = 'Supprimer';
     del.onclick = async () => {
-      if (!confirm('Supprimer ' + f.name + ' et sa sauvegarde ?')) return;
-      await sb.storage.from(BUCKET).remove([`${uid}/roms/${f.name}`, `${uid}/saves/${f.name}.sav`]);
+      let withSave = false;
+      if (saved.has(file)) {
+        withSave = confirm('Supprimer AUSSI la sauvegarde en ligne de ' + file + ' ?\n\nOK = ROM + sauvegarde\nAnnuler = seulement la ROM de cet appareil');
+      } else if (!confirm('Supprimer ' + file + ' de cet appareil ?')) return;
+      await deleteRom(uid, file).catch(() => {});
+      const paths = [`${uid}/roms/${file}`];
+      if (withSave) paths.push(`${uid}/saves/${file}.sav`);
+      await sb.storage.from(BUCKET).remove(paths);
       render();
     };
     btns.appendChild(del);
@@ -180,17 +202,26 @@ async function render() {
     const msg = document.getElementById('msg');
     const f = selectedFile || (input.files && input.files[0]);
     if (!f) { msg.textContent = 'Aucun fichier choisi : touche le cadre en pointillés pour choisir ta ROM.'; return; }
-    if (f.size > 50 * 1024 * 1024) { msg.textContent = 'Fichier trop gros (50 Mo maximum).'; return; }
-    msg.innerHTML = 'Envoi en cours<span class="blink">_</span>';
+    const fname = safe(f.name);
+    if (!CORES[fname.split('.').pop().toLowerCase()]) {
+      msg.textContent = 'Format non reconnu. Pour la PlayStation, utilise un fichier .chd ou .pbp.'; return;
+    }
+    msg.innerHTML = 'Ajout en cours<span class="blink">_</span>';
     try {
-      const { error } = await sb.storage.from(BUCKET).upload(`${uid}/roms/${safe(f.name)}`, f,
-        { upsert: true, contentType: 'application/octet-stream' });
-      if (error) { msg.textContent = 'Erreur : ' + error.message; return; }
+      if (f.size <= CLOUD_MAX) {
+        const { error } = await sb.storage.from(BUCKET).upload(`${uid}/roms/${fname}`, f,
+          { upsert: true, contentType: 'application/octet-stream' });
+        if (error) throw new Error(error.message);
+        selectedFile = null;
+        await render('Jeu ajouté en ligne ✓ disponible sur tous tes appareils');
+        return;
+      }
+      await askPersist();
+      await saveRom(uid, fname, f);
       selectedFile = null;
-      await render();
-      document.getElementById('msg').textContent = 'Jeu ajouté ✓';
+      await render('Jeu trop gros pour le cloud : ajouté sur cet appareil ✓');
     } catch (e) {
-      msg.textContent = 'Erreur réseau : ' + e.message;
+      msg.textContent = 'Erreur : ' + e.message;
     }
   };
 }
