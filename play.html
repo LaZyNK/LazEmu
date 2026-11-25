@@ -35,6 +35,7 @@ body{display:flex;flex-direction:column}
   <a class="back" href="index.html">◀ MENU</a>
   <img src="logo.png" alt="LazEmu">
   <span class="title" id="title"></span>
+  <button class="back" id="saveBtn" style="border:0;cursor:pointer">💾</button>
   <span id="status"></span>
 </div>
 <div id="game"></div>
@@ -62,18 +63,32 @@ else {
 }
 if (!romUrl) { alert('Cette ROM n\'est pas sur cet appareil : ajoute-la depuis le menu.'); location.href = 'index.html'; }
 
-function saveNow() {
+// Envoi de la sauvegarde. "keepalive" (envoi même si on quitte la page) est limité à 64 Ko
+// par le navigateur : les grosses sauvegardes (N64, DS, PlayStation) partent en envoi normal.
+let lastSent = '';
+let sending = false;
+function fingerprint(d) { let h = 0; for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]) | 0; return d.length + ':' + h; }
+function saveNow(force) {
   const gm = window.EJS_emulator && window.EJS_emulator.gameManager;
-  if (!gm) return;
-  gm.saveSaveFiles();
-  const data = gm.getSaveFile();
-  if (!data || !data.length) return;
+  if (!gm || sending) return;
+  try { gm.saveSaveFiles(); } catch (e) {}
+  let data;
+  try { data = gm.getSaveFile(); } catch (e) { data = null; }
+  if (!data || !data.length) { if (force) status.textContent = 'RIEN À SAUVER'; return; }
+  const fp = fingerprint(data);
+  if (fp === lastSent && !force) return;          // rien de nouveau depuis le dernier envoi
+  sending = true;
+  status.textContent = 'SAVE…';
   fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${savePath}`, {
-    method: 'POST', keepalive: true, body: data,
+    method: 'POST', keepalive: data.length < 60000, body: data,
     headers: { Authorization: 'Bearer ' + token, apikey: SUPABASE_KEY,
       'x-upsert': 'true', 'Content-Type': 'application/octet-stream' } })
-    .then(r => { status.textContent = r.ok ? 'SAVE ✓ ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'SAVE ✕'; })
-    .catch(() => { status.textContent = 'SAVE ✕'; });
+    .then(async r => {
+      if (r.ok) { lastSent = fp; status.textContent = 'SAVE ✓ ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); }
+      else { status.textContent = 'SAVE ✕ ' + r.status; console.warn(await r.text()); }
+    })
+    .catch(e => { status.textContent = 'SAVE ✕'; console.warn(e); })
+    .finally(() => { sending = false; });
 }
 
 window.EJS_player = '#game';
@@ -96,10 +111,17 @@ window.EJS_onGameStart = async () => {
     gm.restart();
     status.textContent = 'SAVE CHARGÉE';
   }
-  setInterval(saveNow, 30000);
+  setInterval(() => saveNow(false), 15000);
 };
-window.addEventListener('pagehide', saveNow);
-document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
+window.addEventListener('pagehide', () => saveNow(false));
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(false); });
+document.getElementById('saveBtn').onclick = () => saveNow(true);
+// Le bouton MENU envoie la sauvegarde avant de quitter
+document.querySelector('.back').addEventListener('click', e => {
+  e.preventDefault(); saveNow(true);
+  const go = () => { if (!sending) location.href = 'index.html'; else setTimeout(go, 200); };
+  setTimeout(go, 300);
+});
 const s = document.createElement('script');
 s.src = window.EJS_pathtodata + 'loader.js';
 document.body.appendChild(s);
