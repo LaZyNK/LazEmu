@@ -1,5 +1,3 @@
-
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 export const SUPABASE_URL = 'https://jdkvtidyzosmatxprshs.supabase.co';
 export const SUPABASE_KEY = 'sb_publishable_hRzRgjJ6PUhmNgd1o0QGzA_gp6IEZNA';
