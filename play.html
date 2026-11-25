@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>LazEmu</title>
+<style>html,body{margin:0;height:100%;background:#000;color:#fff}#game{width:100%;height:100%}</style>
+</head>
+<body>
+<div id="game"></div>
+<script type="module">
+import { sb, BUCKET, SUPABASE_URL, SUPABASE_KEY } from './config.js';
+const q = new URLSearchParams(location.search);
+const file = q.get('file');
+const { data: { session } } = await sb.auth.getSession();
+if (!session) location.href = 'index.html';
+const uid = session.user.id;
+let token = session.access_token;
+sb.auth.onAuthStateChange((e, s) => { if (s) token = s.access_token; });
+const savePath = `${uid}/saves/${file}.sav`;
+
+const { data: signed } = await sb.storage.from(BUCKET).createSignedUrl(`${uid}/roms/${file}`, 3600);
+
+function saveNow() {
+  const gm = window.EJS_emulator && window.EJS_emulator.gameManager;
+    if (!gm) return;
+      gm.saveSaveFiles();
+        const data = gm.getSaveFile();
+          if (!data || !data.length) return;
+            fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${savePath}`, {
+                method: 'POST', keepalive: true, body: data,
+                    headers: { Authorization: 'Bearer ' + token, apikey: SUPABASE_KEY,
+                          'x-upsert': 'true', 'Content-Type': 'application/octet-stream' } });
+                          }
+
+                          window.EJS_player = '#game';
+                          window.EJS_core = q.get('core');
+                          window.EJS_gameName = file;
+                          window.EJS_gameUrl = signed.signedUrl;
+                          window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
+                          window.EJS_startOnLoaded = true;
+                          window.EJS_onGameStart = async () => {
+                            const { data: blob } = await sb.storage.from(BUCKET).download(savePath);
+                              if (blob) {
+                                  const gm = window.EJS_emulator.gameManager;
+                                      const p = gm.getSaveFilePath();
+                                          const parts = p.split('/'); let cur = '';
+                                              for (let i = 0; i < parts.length - 1; i++) { cur += parts[i] + '/'; if (!gm.FS.analyzePath(cur).exists) gm.FS.mkdir(cur); }
+                                                  gm.FS.writeFile(p, new Uint8Array(await blob.arrayBuffer()));
+                                                      gm.loadSaveFiles();
+                                                          gm.restart();
+                                                            }
+                                                              setInterval(saveNow, 30000);
+                                                              };
+                                                              window.addEventListener('pagehide', saveNow);
+                                                              document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
+                                                              const s = document.createElement('script');
+                                                              s.src = window.EJS_pathtodata + 'loader.js';
+                                                              document.body.appendChild(s);
+                                                              </script>
+                                                              </body>
+                                                              </html>
+                                                              

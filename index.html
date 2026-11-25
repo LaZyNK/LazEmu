@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LazEmu</title>
+<style>
+body{margin:0;background:#111;color:#eee;font-family:sans-serif;padding:16px}
+a,button{background:#5865f2;color:#fff;border:0;border-radius:8px;padding:10px 14px;text-decoration:none;cursor:pointer}
+.game{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#222;margin:8px 0;padding:12px;border-radius:8px;word-break:break-all}
+.del{background:#a33}
+</style>
+</head>
+<body>
+<div id="app">Chargement…</div>
+<script type="module">
+import { sb, BUCKET, CORES, safe } from './config.js';
+const app = document.getElementById('app');
+
+async function render() {
+  const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+        app.innerHTML = '<h1>LazEmu</h1><p>Connecte-toi pour retrouver tes jeux.</p><button id="login">Se connecter avec Discord</button>';
+            document.getElementById('login').onclick = () =>
+                  sb.auth.signInWithOAuth({ provider: 'discord', options: { redirectTo: location.href.split('#')[0] } });
+                      return;
+                        }
+                          const uid = session.user.id;
+                            const name = session.user.user_metadata.full_name || session.user.user_metadata.name || 'joueur';
+                              const { data: files } = await sb.storage.from(BUCKET).list(uid + '/roms', { limit: 200 });
+                                app.innerHTML = `<h1>Salut ${name}</h1>
+                                    <p><button id="logout">Déconnexion</button></p>
+                                        <p><input type="file" id="rom"> <button id="send">Envoyer ma ROM</button></p>
+                                            <p id="msg"></p><div id="list"></div>`;
+                                              document.getElementById('logout').onclick = async () => { await sb.auth.signOut(); render(); };
+                                                const list = document.getElementById('list');
+                                                  for (const f of (files || []).filter(f => f.id)) {
+                                                      const core = CORES[f.name.split('.').pop().toLowerCase()];
+                                                          const row = document.createElement('div');
+                                                              row.className = 'game';
+                                                                  const label = document.createElement('span'); label.textContent = f.name; row.appendChild(label);
+                                                                      const btns = document.createElement('span'); row.appendChild(btns);
+                                                                          if (core) { const a = document.createElement('a'); a.textContent = 'Jouer';
+                                                                                a.href = 'play.html?file=' + encodeURIComponent(f.name) + '&core=' + core; btns.appendChild(a); }
+                                                                                    const del = document.createElement('button'); del.className = 'del'; del.textContent = 'Supprimer';
+                                                                                        del.onclick = async () => {
+                                                                                              if (!confirm('Supprimer ' + f.name + ' et sa sauvegarde ?')) return;
+                                                                                                    await sb.storage.from(BUCKET).remove([`${uid}/roms/${f.name}`, `${uid}/saves/${f.name}.sav`]);
+                                                                                                          render();
+                                                                                                              };
+                                                                                                                  btns.appendChild(del);
+                                                                                                                      list.appendChild(row);
+                                                                                                                        }
+                                                                                                                          document.getElementById('send').onclick = async () => {
+                                                                                                                              const f = document.getElementById('rom').files[0];
+                                                                                                                                  if (!f) return;
+                                                                                                                                      const msg = document.getElementById('msg');
+                                                                                                                                          if (f.size > 50 * 1024 * 1024) { msg.textContent = 'Fichier trop gros (50 Mo maximum).'; return; }
+                                                                                                                                              msg.textContent = 'Envoi en cours…';
+                                                                                                                                                  const { error } = await sb.storage.from(BUCKET).upload(`${uid}/roms/${safe(f.name)}`, f, { upsert: true });
+                                                                                                                                                      msg.textContent = error ? 'Erreur : ' + error.message : '';
+                                                                                                                                                          render();
+                                                                                                                                                            };
+                                                                                                                                                            }
+                                                                                                                                                            sb.auth.onAuthStateChange(() => render());
+                                                                                                                                                            render();
+                                                                                                                                                            </script>
+                                                                                                                                                            </body>
+                                                                                                                                                            </html>
+
+                                                                                                                                                        
