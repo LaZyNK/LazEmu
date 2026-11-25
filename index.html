@@ -96,6 +96,8 @@ footer{text-align:center;color:var(--muted);font-size:14px;margin-top:26px}
 import { sb, BUCKET, CORES, safe } from './config.js';
 const app = document.getElementById('app');
 const LABEL = { gba:'GBA', gb:'GB', nes:'NES', snes:'SNES', n64:'N64', nds:'DS', segaMD:'MD' };
+let selectedFile = null;   // fichier choisi, gardé même si la page se redessine
+let currentUid = undefined;
 
 async function render() {
   const { data: { session } } = await sb.auth.getSession();
@@ -134,7 +136,12 @@ async function render() {
   app.querySelector('.hello b').textContent = name;
   document.getElementById('logout').onclick = async () => { await sb.auth.signOut(); render(); };
   const input = document.getElementById('rom');
-  input.onchange = () => { document.getElementById('fname').textContent = input.files[0]?.name || 'Choisir ma ROM…'; };
+  if (selectedFile) document.getElementById('fname').textContent = selectedFile.name;
+  input.onchange = () => {
+    if (input.files && input.files[0]) selectedFile = input.files[0];
+    document.getElementById('fname').textContent = selectedFile ? selectedFile.name : 'Choisir ma ROM…';
+    document.getElementById('msg').textContent = '';
+  };
 
   const list = document.getElementById('list');
   if (listError) list.innerHTML = '<p class="empty" style="color:#ff4d6d">Erreur de lecture : ' + listError.message + '</p>';
@@ -171,7 +178,7 @@ async function render() {
 
   document.getElementById('send').onclick = async () => {
     const msg = document.getElementById('msg');
-    const f = input.files[0];
+    const f = selectedFile || (input.files && input.files[0]);
     if (!f) { msg.textContent = 'Aucun fichier choisi : touche le cadre en pointillés pour choisir ta ROM.'; return; }
     if (f.size > 50 * 1024 * 1024) { msg.textContent = 'Fichier trop gros (50 Mo maximum).'; return; }
     msg.innerHTML = 'Envoi en cours<span class="blink">_</span>';
@@ -179,6 +186,7 @@ async function render() {
       const { error } = await sb.storage.from(BUCKET).upload(`${uid}/roms/${safe(f.name)}`, f,
         { upsert: true, contentType: 'application/octet-stream' });
       if (error) { msg.textContent = 'Erreur : ' + error.message; return; }
+      selectedFile = null;
       await render();
       document.getElementById('msg').textContent = 'Jeu ajouté ✓';
     } catch (e) {
@@ -186,8 +194,12 @@ async function render() {
     }
   };
 }
-sb.auth.onAuthStateChange(() => render());
-render();
+// On ne redessine la page que si on se connecte ou se déconnecte,
+// pas à chaque rafraîchissement automatique de la session (sinon le fichier choisi est perdu).
+sb.auth.onAuthStateChange((event, session) => {
+  const uid = session ? session.user.id : null;
+  if (uid !== currentUid) { currentUid = uid; render(); }
+});
 </script>
 </body>
 </html>
