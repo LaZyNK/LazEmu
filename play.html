@@ -40,6 +40,7 @@ body{display:flex;flex-direction:column}
 <div id="game"></div>
 <script type="module">
 import { sb, BUCKET, SUPABASE_URL, SUPABASE_KEY } from './config.js';
+import { getRom } from './rom-store.js';
 const q = new URLSearchParams(location.search);
 const file = q.get('file');
 document.getElementById('title').textContent = (file || '').replace(/\.[^.]+$/, '');
@@ -51,7 +52,15 @@ let token = session.access_token;
 sb.auth.onAuthStateChange((e, s) => { if (s) token = s.access_token; });
 const savePath = `${uid}/saves/${file}.sav`;
 
-const { data: signed } = await sb.storage.from(BUCKET).createSignedUrl(`${uid}/roms/${file}`, 3600);
+// ROM prise sur cet appareil ; sinon, ancienne ROM envoyée en ligne
+let romUrl = null;
+const localRom = await getRom(uid, file).catch(() => null);
+if (localRom) romUrl = URL.createObjectURL(localRom);
+else {
+  const { data: signed } = await sb.storage.from(BUCKET).createSignedUrl(`${uid}/roms/${file}`, 3600);
+  if (signed) romUrl = signed.signedUrl;
+}
+if (!romUrl) { alert('Cette ROM n\'est pas sur cet appareil : ajoute-la depuis le menu.'); location.href = 'index.html'; }
 
 function saveNow() {
   const gm = window.EJS_emulator && window.EJS_emulator.gameManager;
@@ -70,7 +79,7 @@ function saveNow() {
 window.EJS_player = '#game';
 window.EJS_core = q.get('core');
 window.EJS_gameName = file;
-window.EJS_gameUrl = signed.signedUrl;
+window.EJS_gameUrl = romUrl;
 window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
 window.EJS_startOnLoaded = true;
 window.EJS_color = '#3b6cf6';
