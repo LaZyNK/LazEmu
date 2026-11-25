@@ -3,69 +3,183 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LazEmu</title>
+<title>LazEmu – Retro Gaming</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
 <style>
-body{margin:0;background:#111;color:#eee;font-family:sans-serif;padding:16px}
-a,button{background:#5865f2;color:#fff;border:0;border-radius:8px;padding:10px 14px;text-decoration:none;cursor:pointer}
-.game{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#222;margin:8px 0;padding:12px;border-radius:8px;word-break:break-all}
-.del{background:#a33}
+:root{
+  --bg:#070b1f; --panel:#0f1736; --panel2:#16204a;
+  --blue:#3b6cf6; --cyan:#4fd6ff; --green:#8cf04a; --lime:#d7ff4f;
+  --red:#ff4d6d; --text:#e9f0ff; --muted:#8a97c7;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  background:
+    radial-gradient(circle at 20% 0%, rgba(59,108,246,.35), transparent 45%),
+    radial-gradient(circle at 85% 100%, rgba(140,240,74,.22), transparent 45%),
+    linear-gradient(rgba(79,214,255,.06) 1px, transparent 1px) 0 0/32px 32px,
+    linear-gradient(90deg, rgba(79,214,255,.06) 1px, transparent 1px) 0 0/32px 32px,
+    var(--bg);
+  color:var(--text); font-family:'Rajdhani',sans-serif; font-size:17px;
+}
+/* Effet écran CRT */
+body::after{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:99;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px);
+}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 48px}
+header{text-align:center;margin-bottom:18px}
+.logo{width:min(320px,80vw);filter:drop-shadow(0 0 18px rgba(79,214,255,.55));animation:float 4s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-6px)}}
+h1,h2,.pixel{font-family:'Press Start 2P',monospace;letter-spacing:1px}
+h1{font-size:15px;line-height:1.6;margin:12px 0 4px;color:var(--lime);text-shadow:0 0 10px rgba(215,255,79,.6)}
+h2{font-size:12px;color:var(--cyan);margin:0 0 14px;text-shadow:0 0 8px rgba(79,214,255,.6)}
+.sub{color:var(--muted);margin:0}
+.panel{
+  background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border:3px solid var(--blue); border-radius:14px; padding:18px; margin-top:18px;
+  box-shadow:0 0 0 3px #050816, 0 0 24px rgba(59,108,246,.45), inset 0 0 20px rgba(79,214,255,.08);
+}
+.btn{
+  display:inline-block; font-family:'Press Start 2P',monospace; font-size:11px; line-height:1;
+  color:#06102a; background:var(--green); border:0; border-radius:8px; padding:13px 16px;
+  text-decoration:none; cursor:pointer; box-shadow:0 4px 0 #3d8a12; transition:transform .08s, filter .15s;
+}
+.btn:hover{filter:brightness(1.1)}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #3d8a12}
+.btn.discord{background:#5865f2;color:#fff;box-shadow:0 4px 0 #3640a8}
+.btn.ghost{background:transparent;color:var(--cyan);border:2px solid var(--cyan);box-shadow:none;padding:10px 12px}
+.btn.del{background:var(--red);color:#fff;box-shadow:0 4px 0 #a3203a;padding:13px 12px}
+.user{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.hello{font-size:20px;font-weight:700}
+.hello b{color:var(--lime)}
+.upload{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.file{
+  flex:1; min-width:0; display:flex; align-items:center; gap:10px; cursor:pointer;
+  border:2px dashed var(--cyan); border-radius:10px; padding:12px; color:var(--muted);
+}
+.file input{display:none}
+.file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#msg{min-height:20px;color:var(--lime);margin:10px 0 0}
+.games{display:grid;gap:12px}
+.game{
+  display:flex; align-items:center; gap:12px; padding:12px; border-radius:12px;
+  background:rgba(7,11,31,.7); border:2px solid #24306a; transition:border-color .15s, transform .15s;
+}
+.game:hover{border-color:var(--green);transform:translateX(3px)}
+.badge{
+  font-family:'Press Start 2P',monospace; font-size:9px; padding:7px 6px; border-radius:6px;
+  min-width:44px; text-align:center; color:#06102a; background:var(--cyan); flex-shrink:0;
+}
+.badge.n64{background:var(--green)} .badge.gba{background:#b48cff} .badge.snes{background:#ffd34d}
+.badge.nds{background:#ff8fb1} .badge.nes{background:#ff6b6b} .badge.gb{background:#a3e07a} .badge.segaMD{background:#6ea8ff}
+.name{flex:1;min-width:0;font-weight:700;word-break:break-word}
+.actions{display:flex;gap:8px;flex-shrink:0}
+.empty{color:var(--muted);text-align:center;padding:14px 0}
+.blink{animation:blink 1.1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+footer{text-align:center;color:var(--muted);font-size:14px;margin-top:26px}
 </style>
 </head>
 <body>
-<div id="app">Chargement…</div>
+<div class="wrap">
+  <header>
+    <img class="logo" src="logo.png" alt="LazEmu">
+  </header>
+  <div id="app"><p class="pixel" style="text-align:center;font-size:11px">CHARGEMENT<span class="blink">_</span></p></div>
+  <footer>Chaque joueur utilise ses propres ROMs, issues de ses propres jeux.</footer>
+</div>
 <script type="module">
 import { sb, BUCKET, CORES, safe } from './config.js';
 const app = document.getElementById('app');
+const LABEL = { gba:'GBA', gb:'GB', nes:'NES', snes:'SNES', n64:'N64', nds:'DS', segaMD:'MD' };
 
 async function render() {
   const { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-        app.innerHTML = '<h1>LazEmu</h1><p>Connecte-toi pour retrouver tes jeux.</p><button id="login">Se connecter avec Discord</button>';
-            document.getElementById('login').onclick = () =>
-                  sb.auth.signInWithOAuth({ provider: 'discord', options: { redirectTo: location.href.split('#')[0] } });
-                      return;
-                        }
-                          const uid = session.user.id;
-                            const name = session.user.user_metadata.full_name || session.user.user_metadata.name || 'joueur';
-                              const { data: files } = await sb.storage.from(BUCKET).list(uid + '/roms', { limit: 200 });
-                                app.innerHTML = `<h1>Salut ${name}</h1>
-                                    <p><button id="logout">Déconnexion</button></p>
-                                        <p><input type="file" id="rom"> <button id="send">Envoyer ma ROM</button></p>
-                                            <p id="msg"></p><div id="list"></div>`;
-                                              document.getElementById('logout').onclick = async () => { await sb.auth.signOut(); render(); };
-                                                const list = document.getElementById('list');
-                                                  for (const f of (files || []).filter(f => f.id)) {
-                                                      const core = CORES[f.name.split('.').pop().toLowerCase()];
-                                                          const row = document.createElement('div');
-                                                              row.className = 'game';
-                                                                  const label = document.createElement('span'); label.textContent = f.name; row.appendChild(label);
-                                                                      const btns = document.createElement('span'); row.appendChild(btns);
-                                                                          if (core) { const a = document.createElement('a'); a.textContent = 'Jouer';
-                                                                                a.href = 'play.html?file=' + encodeURIComponent(f.name) + '&core=' + core; btns.appendChild(a); }
-                                                                                    const del = document.createElement('button'); del.className = 'del'; del.textContent = 'Supprimer';
-                                                                                        del.onclick = async () => {
-                                                                                              if (!confirm('Supprimer ' + f.name + ' et sa sauvegarde ?')) return;
-                                                                                                    await sb.storage.from(BUCKET).remove([`${uid}/roms/${f.name}`, `${uid}/saves/${f.name}.sav`]);
-                                                                                                          render();
-                                                                                                              };
-                                                                                                                  btns.appendChild(del);
-                                                                                                                      list.appendChild(row);
-                                                                                                                        }
-                                                                                                                          document.getElementById('send').onclick = async () => {
-                                                                                                                              const f = document.getElementById('rom').files[0];
-                                                                                                                                  if (!f) return;
-                                                                                                                                      const msg = document.getElementById('msg');
-                                                                                                                                          if (f.size > 50 * 1024 * 1024) { msg.textContent = 'Fichier trop gros (50 Mo maximum).'; return; }
-                                                                                                                                              msg.textContent = 'Envoi en cours…';
-                                                                                                                                                  const { error } = await sb.storage.from(BUCKET).upload(`${uid}/roms/${safe(f.name)}`, f, { upsert: true });
-                                                                                                                                                      msg.textContent = error ? 'Erreur : ' + error.message : '';
-                                                                                                                                                          render();
-                                                                                                                                                            };
-                                                                                                                                                            }
-                                                                                                                                                            sb.auth.onAuthStateChange(() => render());
-                                                                                                                                                            render();
-                                                                                                                                                            </script>
-                                                                                                                                                            </body>
-                                                                                                                                                            </html>
+  if (!session) {
+    app.innerHTML = `<div class="panel" style="text-align:center">
+      <h1>PRESS START</h1>
+      <p class="sub">Connecte-toi pour retrouver tes jeux et tes sauvegardes sur tous tes appareils.</p>
+      <p style="margin-top:20px"><button class="btn discord" id="login">Connexion Discord</button></p>
+    </div>`;
+    document.getElementById('login').onclick = () =>
+      sb.auth.signInWithOAuth({ provider: 'discord', options: { redirectTo: location.href.split('#')[0] } });
+    return;
+  }
+  const uid = session.user.id;
+  const name = session.user.user_metadata.full_name || session.user.user_metadata.name || 'joueur';
+  const { data: files } = await sb.storage.from(BUCKET).list(uid + '/roms', { limit: 200 });
+  const games = (files || []).filter(f => f.id);
 
-                                                                                                                                                        
+  app.innerHTML = `
+    <div class="panel user">
+      <div class="hello">Salut <b></b> !</div>
+      <button class="btn ghost" id="logout">Déconnexion</button>
+    </div>
+    <div class="panel">
+      <h2>&gt; AJOUTER UN JEU</h2>
+      <div class="upload">
+        <label class="file"><input type="file" id="rom"><span id="fname">Choisir ma ROM…</span></label>
+        <button class="btn" id="send">Envoyer</button>
+      </div>
+      <p id="msg"></p>
+    </div>
+    <div class="panel">
+      <h2>&gt; MES JEUX (${games.length})</h2>
+      <div class="games" id="list"></div>
+    </div>`;
+  app.querySelector('.hello b').textContent = name;
+  document.getElementById('logout').onclick = async () => { await sb.auth.signOut(); render(); };
+  const input = document.getElementById('rom');
+  input.onchange = () => { document.getElementById('fname').textContent = input.files[0]?.name || 'Choisir ma ROM…'; };
+
+  const list = document.getElementById('list');
+  if (!games.length) list.innerHTML = '<p class="empty">Aucun jeu pour l\'instant. Ajoute ta première ROM !</p>';
+  for (const f of games) {
+    const core = CORES[f.name.split('.').pop().toLowerCase()];
+    const row = document.createElement('div');
+    row.className = 'game';
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + (core || '');
+    badge.textContent = LABEL[core] || '???';
+    const label = document.createElement('span');
+    label.className = 'name';
+    label.textContent = f.name.replace(/\.[^.]+$/, '');
+    const btns = document.createElement('span');
+    btns.className = 'actions';
+    if (core) {
+      const a = document.createElement('a');
+      a.className = 'btn'; a.textContent = '▶ JOUER';
+      a.href = 'play.html?file=' + encodeURIComponent(f.name) + '&core=' + core;
+      btns.appendChild(a);
+    }
+    const del = document.createElement('button');
+    del.className = 'btn del'; del.textContent = '✕'; del.title = 'Supprimer';
+    del.onclick = async () => {
+      if (!confirm('Supprimer ' + f.name + ' et sa sauvegarde ?')) return;
+      await sb.storage.from(BUCKET).remove([`${uid}/roms/${f.name}`, `${uid}/saves/${f.name}.sav`]);
+      render();
+    };
+    btns.appendChild(del);
+    row.append(badge, label, btns);
+    list.appendChild(row);
+  }
+
+  document.getElementById('send').onclick = async () => {
+    const f = input.files[0];
+    if (!f) return;
+    const msg = document.getElementById('msg');
+    if (f.size > 50 * 1024 * 1024) { msg.textContent = 'Fichier trop gros (50 Mo maximum).'; return; }
+    msg.innerHTML = 'Envoi en cours<span class="blink">_</span>';
+    const { error } = await sb.storage.from(BUCKET).upload(`${uid}/roms/${safe(f.name)}`, f, { upsert: true });
+    if (error) { msg.textContent = 'Erreur : ' + error.message; return; }
+    render();
+  };
+}
+sb.auth.onAuthStateChange(() => render());
+render();
+</script>
+</body>
+</html>
